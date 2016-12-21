@@ -18,9 +18,16 @@ Hol_datatype
         | SEQ    of GCL => GCL
         | ASG    of string => 'expr
         | IFTHENELSE of 'pred => GCL => GCL
+        | WHILE of 'pred => 'pred => GCL
    ` ;
 
 val SEQS_def   = Define `(SEQS [] = SKIP) /\ (SEQS (S1::rest) = SEQ S1 (SEQS rest))` ;
+
+
+val iter_def = Define
+    `(iter g body 0 s t = ~g s /\ (t=s))
+      /\
+      (iter g body (SUC k) s t = (g s /\ (?s'. body s s' /\ iter g body k s' t)))` ;
 
 val exec_def = Define
        `(exec SKIP s t = (s=t))  (* t is a final state of SKIP s, if and only if t=s *)
@@ -32,6 +39,8 @@ val exec_def = Define
         (exec (ASG v e) s t = (t = (\var. if var=v then e s else s var)))
         ∧
         (exec (IFTHENELSE g S1 S2) s t = (g s ⇒ exec S1 s t) ∧ (¬g s ⇒ exec S2 s t))
+        ∧
+        (exec (WHILE inv g body) s t = (?k. iter g (exec body) k s t))
         ` ;
 
 val HOARE_def = Define `HOARE gcl p q = (∀ s t. p s ∧ exec gcl s t ⇒   q t)` ;
@@ -41,6 +50,7 @@ val FF_def  = Define `FF = (\s. F)` ;
 val NOT_def = Define `NOT g = (\s. ~g s)` ;
 val IMP_def = Define `IMP p q = (\s. p s ⇒ q s)`;
 val AND_def = Define `AND p q = (\s. p s ∧ q s)`;
+val OR_def = Define `OR p q = (\s. p s \/ q s)`;
 val VALID_def = Define  `VALID p = (∀s. p s)`;
 
 
@@ -96,6 +106,77 @@ val HOARE_if_then_else_2_thm = prove
     );
 
 
+val HOARE_loop_thm1 = prove
+    (--`(HOARE (WHILE inv' g body) (AND (NOT g) q) q)`--,
+    REWRITE_TAC[HOARE_def, AND_def, NOT_def]
+    THEN BETA_TAC
+    THEN REWRITE_TAC [exec_def]
+    THEN REPEAT STRIP_TAC
+    THEN Cases_on `k`
+    THENL
+    [ FULL_SIMP_TAC std_ss [iter_def]
+    , RULE_ASSUM_TAC (REWRITE_RULE [iter_def]) (* now we have contradiction *)
+      THEN PROVE_TAC[]
+    ]
+    );
+
+
+val lemma = prove(--`p ==> q ==> r = (p /\ q) ==> r`--, PROVE_TAC[]);
+
+val HOARE_loop_lemma1 = prove
+    (--`HOARE body (AND inv' g) inv' ⇒ HOARE (WHILE inv' g body) inv' (AND inv' (NOT g)) `--,
+    REWRITE_TAC[HOARE_def, AND_def, NOT_def]
+    THEN BETA_TAC
+    THEN REWRITE_TAC[exec_def]
+    THEN STRIP_TAC
+    THEN STRIP_TAC
+    THEN STRIP_TAC
+    THEN STRIP_TAC
+    THEN FIRST_ASSUM (UNDISCH_TAC o concl)
+    THEN FIRST_ASSUM (UNDISCH_TAC o concl)
+    THEN SPEC_TAC (--`s: string -> 'a`--, --`s: string-> 'a`--)
+    THEN SPEC_TAC (--`t: string -> 'a`--, --`t: string-> 'a`--)
+    THEN Induct_on `k`
+    THENL [
+      REWRITE_TAC[iter_def]
+      THEN PROVE_TAC[],
+      REWRITE_TAC[iter_def]
+      THEN PROVE_TAC[]
+      (* OR:
+      Magic I did with Wishnu, however cannot reproduce,
+      will try later.
+      THEN STRIP_TAC (* now PROVE_TAC[], OR manually *)
+      THEN STRIP_TAC
+      THEN STRIP_TAC
+      THEN FIRST_ASSUM (MATCH_MP_TAC)
+      THEN RULE_ASSUM_TAC (REWRITE_RULE [lemma])
+      THEN FIRST_ASSUM (MATCH_MP_TAC)
+      THEN EXISTS_TAC (--`s' : string -> 'a`--)
+      THEN ASM_REWRITE_TAC[]
+      THEN FIRST_ASSUM MATCH_MP_TAC
+      THEN EXISTS_TAC (--`s : string -> 'a`--)
+      THEN ASM_REWRITE_TAC[]*)
+    ]
+    );
+
+
+
+val HOARE_loop_thm_2 = prove
+    (--`VALID (IMP p inv') /\ HOARE S' (AND inv' g) (inv') ∧ VALID (IMP (AND (inv') (NOT g)) q) ⇒ HOARE (WHILE inv' g S') p q`--,
+    STRIP_TAC
+    THEN MATCH_MP_TAC (GEN_ALL HOARE_postcond_weakening_thm)
+    THEN EXISTS_TAC(--`AND inv' (NOT g) : (string -> 'a) -> bool`--)
+    THEN CONJ_TAC
+    THENL
+    [ ASM_REWRITE_TAC[]
+    , MATCH_MP_TAC (GEN_ALL HOARE_precond_strengthening_thm)
+      THEN EXISTS_TAC(--`inv' : (string -> 'a) -> bool`--)
+      THEN ASM_REWRITE_TAC[]
+      THEN MATCH_MP_TAC(GEN_ALL(HOARE_loop_lemma1))
+      THEN ASM_REWRITE_TAC[]
+    ]
+    );
+
 val HOARE_asg_thm = prove
       (--`HOARE (ASG v e) (\s. q (\var. if var=v then e s else s var)) q `--,
       REWRITE_TAC[HOARE_def]
@@ -114,7 +195,14 @@ val wlp_def = Define
         ∧
         (wlp (ASG v e) q  = (\s. q (\var. if var=v then e s else s var)))
         ∧
-        (wlp (IFTHENELSE g S1 S2) q = (\s. (g s ⇒ wlp S1 q s) ∧ (¬(g s) ⇒ wlp S2 q s)))
+        (wlp (IFTHENELSE g S1 S2) q =
+          (λs. (g s ⇒ wlp S1 q s) ∧ (¬(g s) ⇒ wlp S2 q s)))
+        ∧
+        (wlp (WHILE inv' g S') q =
+          if VALID (IMP (AND inv' (NOT g)) q)
+          then inv'
+          else AND (NOT g) q
+        )
         ` ;
 
 
@@ -188,6 +276,7 @@ val SOUND_wlp_thm = prove
             THEN BETA_TAC
             THEN PROVE_TAC[]
         ]
+      
 
     ]
   ) ;
