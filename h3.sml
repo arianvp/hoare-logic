@@ -199,7 +199,7 @@ val wlp_def = Define
           (λs. (g s ⇒ wlp S1 q s) ∧ (¬(g s) ⇒ wlp S2 q s)))
         ∧
         (wlp (WHILE inv' g S') q =
-          if VALID (IMP (AND inv' (NOT g)) q)
+          if VALID (IMP (AND inv' (NOT g)) q) ∧ VALID (IMP (AND inv' g) (wlp S' inv'))
           then inv'
           else AND (NOT g) q
         )
@@ -242,6 +242,11 @@ val SOUND_wlp_asg_thm = prove
 (* Oh it's because we need the same amount of arguments in THENL
 * that the Induct_on returns  => *)
 
+
+(* we need this for lulz . lifted lemma1*)
+val lemma2 = prove(--`IMP (p) (IMP q r) = IMP (AND p q) r`--, REWRITE_TAC[IMP_def,AND_def] THEN BETA_TAC THEN PROVE_TAC[]);
+
+
 val SOUND_wlp_thm = prove
    (--`(!q. HOARE gcl (wlp gcl q) q)`--,
     Induct_on `gcl`
@@ -276,7 +281,24 @@ val SOUND_wlp_thm = prove
             THEN BETA_TAC
             THEN PROVE_TAC[]
         ]
-      
+      REPEAT STRIP_TAC
+      THEN REWRITE_TAC[wlp_def]
+      THEN IF_CASES_TAC
+      THENL
+      [ MATCH_MP_TAC(GEN_ALL(HOARE_loop_thm_2))
+        THEN ASM_REWRITE_TAC[]
+        THEN CONJ_TAC
+        THENL
+        [ PROVE_TAC[]
+        , PROVE_TAC[VALID_def, IMP_def]
+          THEN UNDISCH_TAC(--`∀q. HOARE gcl (wlp gcl q) q`--)
+          THEN FIRST_X_ASSUM (MP_TAC)
+          THEN REWRITE_TAC[lemma]
+          THEN ASSUME_TAC(GEN_ALL(HOARE_precond_strengthening_thm))
+          THEN PROVE_TAC[]
+        ]
+      , PROVE_TAC[HOARE_loop_thm1]
+      ]
 
     ]
   ) ;
