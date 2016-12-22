@@ -283,23 +283,50 @@ val SOUND_wlp_thm = prove
         ]
       REPEAT STRIP_TAC
       THEN REWRITE_TAC[wlp_def]
+      THEN MATCH_MP_TAC(GEN_ALL(MATCH_MP_TAC(HOARE_precond_strengthening_thm)))
+      THEN EXISTS_TAC(--`p0 : (string -> 'a) -> bool`--)
       THEN IF_CASES_TAC
       THENL
       [ MATCH_MP_TAC(GEN_ALL(HOARE_loop_thm_2))
         THEN ASM_REWRITE_TAC[]
+        THEN MATCH_MP_TAC(GEN_ALL(HOARE_postcond_weakening_thm))
         THEN CONJ_TAC
         THENL
-        [ PROVE_TAC[]
-        , PROVE_TAC[VALID_def, IMP_def]
-          THEN UNDISCH_TAC(--`∀q. HOARE gcl (wlp gcl q) q`--)
+        [ PROVE_TAC[VALID_def, IMP_def]
+        , UNDISCH_TAC(--`∀q. HOARE gcl (wlp gcl q) q`--)
           THEN FIRST_X_ASSUM (MP_TAC)
           THEN REWRITE_TAC[lemma]
+          THEN X_GEN_TAC(--`p0 : (string -> 'a) -> bool`--)
           THEN ASSUME_TAC(GEN_ALL(HOARE_precond_strengthening_thm))
           THEN PROVE_TAC[]
         ]
       , PROVE_TAC[HOARE_loop_thm1]
       ]
-
+      (*[ CONJ_TAC
+        THENL
+        [ PROVE_TAC[VALID_def, IMP_def]
+        , FIRST_X_ASSUM(MP_TAC)
+          THEN STRIP_TAC
+          THEN UNDISCH_TAC(--`HOARE gcl (wlp gcl q) q`--)
+          THEN FIRST_X_ASSUM (MP_TAC)
+          THEN REWRITE_TAC[lemma]
+        ]
+      ]*)
+      (*[ MATCH_MP_TAC(GEN_ALL(HOARE_loop_thm_2))
+        THEN ASM_REWRITE_TAC[]
+      MATCH_MP_TAC(GEN_ALL(HOARE_postcond_weakening_thm)
+        THEN CONJ_TAC
+        THENL
+        [ PROVE_TAC[VALID_def, IMP_def]
+        , UNDISCH_TAC(--`∀q. HOARE gcl (wlp gcl q) q`--)
+          THEN FIRST_X_ASSUM (MP_TAC)
+          THEN REWRITE_TAC[lemma]
+          THEN X_GEN_TAC(--`p0 : (string -> 'a) -> bool`--)
+          THEN ASSUME_TAC(GEN_ALL(HOARE_precond_strengthening_thm))
+          THEN PROVE_TAC[]
+        ]
+      , PROVE_TAC[HOARE_loop_thm1]
+      ]*)
     ]
   ) ;
 
